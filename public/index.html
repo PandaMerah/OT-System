@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Employee OT Minutes System + Client-Side OCR</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    }
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+  <header class="bg-slate-900 text-white shadow">
+    <div class="max-w-7xl mx-auto px-4 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-xl font-bold tracking-tight">Employee Overtime (OT) Minutes System</h1>
+          <span class="px-2 py-0.5 text-[11px] font-semibold bg-teal-600 text-white rounded-full">Tesseract.js OCR</span>
+        </div>
+        <p class="text-xs text-slate-300 mt-0.5">Client-Side KIJO 6902 PDF/Photo OCR • Multi-Employee Rollup • Excel/CSV Import & Export</p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button onclick="loadSampleData()" class="px-3 py-1.5 text-xs font-medium bg-slate-700 hover:bg-slate-600 rounded-md transition">Load SYAZA Sample (Oct 2026)</button>
+        <button onclick="clearAllRows()" class="px-3 py-1.5 text-xs font-medium bg-rose-700 hover:bg-rose-600 rounded-md transition">Clear Logs</button>
+        <button onclick="exportToExcel()" class="px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 rounded-md shadow transition">Export Excel (.xlsx)</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
+    <!-- KPI Cards -->
+    <section class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="bg-white p-4 rounded-xl border border-slate-200 border-l-4 border-l-slate-800 shadow-sm">
+        <div class="text-xs font-semibold uppercase text-slate-500">Employees</div>
+        <div id="kpiEmployees" class="text-2xl font-bold mt-1 text-slate-900">0</div>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-slate-200 border-l-4 border-l-teal-600 shadow-sm">
+        <div class="text-xs font-semibold uppercase text-slate-500">Total OT Minutes</div>
+        <div id="kpiOtMins" class="text-2xl font-bold mt-1 text-teal-700">0 min</div>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-slate-200 border-l-4 border-l-blue-600 shadow-sm">
+        <div class="text-xs font-semibold uppercase text-slate-500">Total OT Hours</div>
+        <div id="kpiOtHrs" class="text-2xl font-bold mt-1 text-blue-700">0.00 hrs</div>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-slate-200 border-l-4 border-l-amber-500 shadow-sm">
+        <div class="text-xs font-semibold uppercase text-slate-500">Total Late Minutes</div>
+        <div id="kpiLateMins" class="text-2xl font-bold mt-1 text-amber-700">0 min</div>
+      </div>
+    </section>
+
+    <!-- Client-Side OCR Upload Zone (Tesseract.js + PDF.js) -->
+    <section class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div>
+          <h2 class="text-sm font-bold uppercase tracking-wider text-slate-800">Scan KIJO Time Card PDF or Photo (100% Client-Side OCR)</h2>
+          <p class="text-xs text-slate-500 mt-0.5">Upload scanned multi-page PDFs (e.g. Page 1 Days 1–15, Page 2 Days 16–31) or smartphone photos. Runs locally in your browser via Tesseract.js.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 text-xs">
+          <label class="inline-flex items-center gap-1.5 text-slate-600 cursor-pointer">
+            <input id="ocrEnhanceFilter" type="checkbox" checked class="rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
+            <span>High-Contrast Punch Filter</span>
+          </label>
+          <div class="flex items-center gap-1.5">
+            <span class="text-slate-500">Override Name:</span>
+            <input id="ocrOverrideName" type="text" placeholder="Auto-detect" class="border border-slate-300 rounded px-2 py-1 text-xs w-28 uppercase" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Dropzone -->
+      <div id="ocrDropzone"
+           onclick="document.getElementById('ocrFileInput').click()"
+           ondragover="event.preventDefault(); this.classList.add('border-teal-500', 'bg-teal-50/40');"
+           ondragleave="this.classList.remove('border-teal-500', 'bg-teal-50/40');"
+           ondrop="handleOcrDrop(event)"
+           class="border-2 border-dashed border-slate-300 hover:border-teal-500 hover:bg-slate-50 rounded-xl p-6 text-center cursor-pointer transition">
+        <input id="ocrFileInput" type="file" accept=".pdf,image/*" multiple onchange="handleOcrFiles(this.files)" class="hidden" />
+        <div class="mx-auto w-10 h-10 rounded-full bg-teal-50 text-teal-700 flex items-center justify-center font-bold text-lg mb-2">OCR</div>
+        <p class="text-sm font-semibold text-slate-800">Click to select or drag & drop KIJO Time Card PDFs or Photos</p>
+        <p class="text-xs text-slate-500 mt-1">Supports multi-page <code class="bg-slate-100 px-1 rounded">.pdf</code>, <code class="bg-slate-100 px-1 rounded">.jpg</code>, <code class="bg-slate-100 px-1 rounded">.png</code>, <code class="bg-slate-100 px-1 rounded">.webp</code> • Batch multiple employees at once</p>
+      </div>
+
+      <!-- OCR Progress Bar -->
+      <div id="ocrProgressWrap" class="hidden bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-2">
+        <div class="flex items-center justify-between text-xs font-medium">
+          <span id="ocrStatusText" class="text-slate-700">Initializing Tesseract OCR engine...</span>
+          <span id="ocrPercentText" class="text-teal-700 font-bold">0%</span>
+        </div>
+        <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+          <div id="ocrProgressBar" class="bg-teal-600 h-2 rounded-full transition-all duration-150" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <!-- OCR Staging / Verification Panel -->
+      <div id="ocrStagingPanel" class="hidden border border-teal-200 bg-teal-50/30 rounded-xl p-4 space-y-3">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <h3 class="text-sm font-bold text-slate-900">OCR Extraction Review & Verification</h3>
+            <p id="ocrSummaryMeta" class="text-xs text-slate-600">Review extracted punch times below and fix any blurry scan digits before importing.</p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button onclick="toggleRawOcrBox()" class="px-2.5 py-1.5 text-xs font-medium bg-white border border-slate-300 hover:bg-slate-100 rounded-md">Toggle Raw OCR Text</button>
+            <button onclick="discardOcrStaging()" class="px-2.5 py-1.5 text-xs font-medium text-rose-700 bg-white border border-rose-200 hover:bg-rose-50 rounded-md">Discard</button>
+            <button onclick="commitOcrStaging()" class="px-3.5 py-1.5 text-xs font-semibold bg-teal-700 hover:bg-teal-600 text-white rounded-md shadow-sm">Import Verified Punches to OT Log</button>
+          </div>
+        </div>
+
+        <div id="rawOcrContainer" class="hidden">
+          <label class="block text-[11px] font-semibold uppercase text-slate-500 mb-1">Raw Tesseract OCR Output</label>
+          <textarea id="rawOcrTextarea" rows="5" readonly class="w-full text-xs font-mono bg-slate-900 text-emerald-300 p-2.5 rounded-lg"></textarea>
+        </div>
+
+        <div class="overflow-x-auto bg-white rounded-lg border border-slate-200">
+          <table class="w-full text-xs text-left">
+            <thead class="bg-slate-100 text-slate-600 uppercase">
+              <tr>
+                <th class="px-2.5 py-2 text-center">Import</th>
+                <th class="px-2.5 py-2">Employee</th>
+                <th class="px-2.5 py-2">Date</th>
+                <th class="px-2.5 py-2">Day Type</th>
+                <th class="px-2.5 py-2">Clock In</th>
+                <th class="px-2.5 py-2">Clock Out</th>
+                <th class="px-2.5 py-2">Remarks / OCR Note</th>
+              </tr>
+            </thead>
+            <tbody id="ocrStagingBody" class="divide-y divide-slate-200"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Shift & OT Rule Configuration -->
+    <section class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 mb-3">Shift & Overtime Calculation Rules</h2>
+      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 text-sm">
+        <div>
+          <label class="block text-xs font-medium text-slate-500 mb-1">Weekday Start</label>
+          <input id="cfgWkStart" type="time" value="08:30" onchange="recalculateAll()" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-500 mb-1">Weekday OT After</label>
+          <input id="cfgWkEnd" type="time" value="17:30" onchange="recalculateAll()" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-500 mb-1">Saturday Start</label>
+          <input id="cfgSatStart" type="time" value="08:30" onchange="recalculateAll()" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-500 mb-1">Saturday OT After</label>
+          <input id="cfgSatEnd" type="time" value="13:00" onchange="recalculateAll()" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-500 mb-1">Grace Period (min)</label>
+          <input id="cfgGrace" type="number" min="0" value="0" onchange="recalculateAll()" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-500 mb-1">Min OT Cutoff (min)</label>
+          <input id="cfgMinOt" type="number" min="0" value="0" onchange="recalculateAll()" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-500 mb-1">Round Down (min)</label>
+          <select id="cfgRound" onchange="recalculateAll()" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5">
+            <option value="1" selected>Exact (1 min)</option>
+            <option value="5">5 mins</option>
+            <option value="15">15 mins</option>
+            <option value="30">30 mins</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <!-- Employee Summary Rollup -->
+    <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700">Employee OT Rollup Summary</h2>
+        <span class="text-xs text-slate-500">Grouped automatically by Employee Name</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm text-left">
+          <thead class="bg-slate-100 text-slate-600 text-xs uppercase">
+            <tr>
+              <th class="px-4 py-2.5">Employee Name</th>
+              <th class="px-4 py-2.5 text-center">Logs</th>
+              <th class="px-4 py-2.5 text-right">Total OT (Min)</th>
+              <th class="px-4 py-2.5 text-right">Total OT (Hrs)</th>
+              <th class="px-4 py-2.5 text-right">Late (Min)</th>
+              <th class="px-4 py-2.5 text-right">Weighted OT Hrs</th>
+            </tr>
+          </thead>
+          <tbody id="summaryTableBody" class="divide-y divide-slate-200"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Add Single Punch / Bulk Import -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 mb-3">Add Clock-In / Clock-Out Entry</h2>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+          <div>
+            <label class="block text-xs font-medium text-slate-500 mb-1">Employee Name</label>
+            <input id="inName" type="text" placeholder="e.g. SYAZA" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-500 mb-1">Date</label>
+            <input id="inDate" type="date" value="2026-10-01" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-500 mb-1">Day Type</label>
+            <select id="inDayType" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5">
+              <option value="Auto">Auto (From Date)</option>
+              <option value="Weekday">Weekday (1.5x)</option>
+              <option value="Saturday">Saturday (1.5x)</option>
+              <option value="Sunday">Sunday (2.0x)</option>
+              <option value="Public Holiday">Public Holiday (3.0x)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-500 mb-1">Clock In (HH:MM)</label>
+            <input id="inClockIn" type="text" placeholder="07:16" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-500 mb-1">Clock Out (HH:MM)</label>
+            <input id="inClockOut" type="text" placeholder="20:08" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-500 mb-1">Break Deduct (Min)</label>
+            <input id="inBreak" type="number" min="0" value="0" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
+          </div>
+        </div>
+        <button onclick="addEntryFromForm()" class="mt-4 w-full py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-md transition">+ Add Attendance Record</button>
+      </div>
+
+      <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 mb-1">Bulk Paste or Import CSV / Excel</h2>
+        <p class="text-xs text-slate-500 mb-2">Format per line: <code class="bg-slate-100 px-1 rounded">Name, YYYY-MM-DD, ClockIn, ClockOut, DayType(optional)</code>. Automatically cleans KIJO OCR marks (e.g. <code>807:16</code> &rarr; <code>07:16</code>).</p>
+        <textarea id="bulkPasteBox" rows="3" placeholder="SYAZA, 2026-10-01, 807:16, 20:08&#10;AHMAD, 2026-10-01, 08:25, 19:45" class="w-full border border-slate-300 rounded-md p-2 text-xs font-mono"></textarea>
+        <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <input id="fileUpload" type="file" accept=".csv,.xlsx,.xls" onchange="handleFileUpload(event)" class="text-xs text-slate-600" />
+          <button onclick="parseBulkPaste()" class="px-4 py-1.5 bg-teal-700 hover:bg-teal-600 text-white text-xs font-semibold rounded-md transition">Import Pasted Lines</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Detailed Attendance Table -->
+    <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700">Detailed Attendance & OT Log</h2>
+        <span id="rowCountBadge" class="text-xs font-medium text-slate-500">0 rows</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs text-left">
+          <thead class="bg-slate-100 text-slate-600 uppercase">
+            <tr>
+              <th class="px-3 py-2.5">Employee</th>
+              <th class="px-3 py-2.5">Date</th>
+              <th class="px-3 py-2.5">Day Type</th>
+              <th class="px-3 py-2.5 text-center">Clock In</th>
+              <th class="px-3 py-2.5 text-center">Clock Out</th>
+              <th class="px-3 py-2.5 text-right">Break</th>
+              <th class="px-3 py-2.5 text-right">Late (Min)</th>
+              <th class="px-3 py-2.5 text-right">OT (Min)</th>
+              <th class="px-3 py-2.5 text-right">OT (Hrs)</th>
+              <th class="px-3 py-2.5 text-center">Mult</th>
+              <th class="px-3 py-2.5 text-center">Action</th>
+            </tr>
+          </thead>
+          <tbody id="logTableBody" class="divide-y divide-slate-200"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    let records = [];
+    let stagedOcrRows = [];
+
+    const MONTH_MAP = {
+      JAN: "01", FEB: "02", MAR: "03", APR: "04",
+      MAY: "05", JUN: "06", JUL: "07", AUG: "08",
+      SEP: "09", OCT: "10", NOV: "11", DEC: "12"
+    };
+
+    function cleanTimeToken(raw) {
+      if (!raw) return "";
+      let s = String(raw).trim();
+      s = s.replace(/(\d{1,2})\s*:\s*(\d{2})/g, "$1:$2");
+      s = s.replace(/(\d{2})\.(\d{2})/g, "$1:$2");
+      s = s.replace(/\d?(\d{2})(\d{2}):/g, "$1:$2");
+      const m = s.match(/(\d{1,2}:\d{2})$/);
+      if (m) {
+        let [hh, mm] = m[1].split(":").map(Number);
+        if (hh >= 24 && hh % 100 < 24) hh = hh % 100;
+        if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
+          return String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0");
+        }
+      }
+      return "";
+    }
+
+    function timeToMins(tStr) {
+      const clean = cleanTimeToken(tStr);
+      if (!clean) return null;
+      const [h, m] = clean.split(":").map(Number);
+      return h * 60 + m;
+    }
+
+    function detectDayType(dateStr, explicitType) {
+      if (explicitType && explicitType !== "Auto") return explicitType;
+      if (!dateStr) return "Weekday";
+      const d = new Date(dateStr + "T00:00:00");
+      if (isNaN(d)) return "Weekday";
+      const dow = d.getDay();
+      if (dow === 0) return "Sunday";
+      if (dow === 6) return "Saturday";
+      return "Weekday";
+    }
+
+    // =========================================================================
+    // CLIENT-SIDE OCR ENGINE (TESSERACT.JS + PDF.JS)
+    // =========================================================================
+    function handleOcrDrop(evt) {
+      evt.preventDefault();
+      evt.currentTarget.classList.remove("border-teal-500", "bg-teal-50/40");
+      if (evt.dataTransfer && evt.dataTransfer.files.length) {
+        handleOcrFiles(evt.dataTransfer.files);
+      }
+    }
+
+    function preprocessCanvasForOcr(sourceCanvas, applyContrast) {
+      const target = document.createElement("canvas");
+      const minWidth = 1800;
+      const scale = sourceCanvas.width < minWidth ? (minWidth / sourceCanvas.width) : 1;
+      target.width = Math.round(sourceCanvas.width * scale);
+      target.height = Math.round(sourceCanvas.height * scale);
+      const ctx = target.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, target.width, target.height);
+      ctx.drawImage(sourceCanvas, 0, 0, target.width, target.height);
+
+      if (applyContrast) {
+        const imgData = ctx.getImageData(0, 0, target.width, target.height);
+        const d = imgData.data;
+        const contrast = 1.45;
+        const intercept = 128 * (1 - contrast);
+        for (let i = 0; i < d.length; i += 4) {
+          const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+          let adj = lum * contrast + intercept;
+          // Suppress light tinted card gridlines while preserving dark punch ink
+          if (adj > 205) adj = 255;
+          else if (adj < 115) adj = 0;
+          d[i] = d[i + 1] = d[i + 2] = adj;
+        }
+        ctx.putImageData(imgData, 0, 0);
+      }
+      return target;
+    }
+
+    async function renderPdfToCanvases(file) {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const canvases = [];
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 2.8 });
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext("2d");
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        canvases.push(canvas);
+      }
+      return canvases;
+    }
+
+    function loadImageFileToCanvas(file) {
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          canvas.getContext("2d").drawImage(img, 0, 0);
+          URL.revokeObjectURL(url);
+          resolve(canvas);
+        };
+        img.onerror = (err) => {
+          URL.revokeObjectURL(url);
+          reject(err);
+        };
+        img.src = url;
+      });
+    }
+
+    function extractKijoMetadata(text, fallbackName) {
+      const lines = text.split(/?
+/).map(l => l.trim()).filter(Boolean);
+      let empName = fallbackName || "EMPLOYEE";
+      let month = String(new Date().getMonth() + 1).padStart(2, "0");
+      let year = String(new Date().getFullYear());
+
+      const ym = text.match(/(20\d{2})/);
+      if (ym) year = ym[1];
+
+      const mm = text.match(/(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)/i);
+      if (mm) month = MONTH_MAP[mm[1].toUpperCase()];
+
+      const skipWords = new Set([
+        "MALE", "FEMALE", "DEPT", "REG", "HRS", "FOR", "ELECTRONIC",
+        "TIME", "RECORDER", "ATTENDANCE", "RECORD", "MONTH", "YEAR",
+        "POSITION", "NO", "OVERTIME", "DEDUCTION", "BALANCE", "DUE"
+      ]);
+
+      for (let i = 0; i < lines.length; i++) {
+        if (/Name/i.test(lines[i])) {
+          const after = lines[i].replace(/.*Name[:\s|]*/i, "").replace(/[^A-Za-z\s'.-]/g, "").trim();
+          if (after && !skipWords.has(after.toUpperCase()) && after.length >= 2) {
+            empName = after.toUpperCase();
+            break;
+          }
+          for (let j = i + 1; j <= Math.min(i + 3, lines.length - 1); j++) {
+            const cand = lines[j].replace(/[^A-Za-z\s'.-]/g, "").trim();
+            if (cand && !skipWords.has(cand.toUpperCase()) && cand.length >= 2) {
+              empName = cand.toUpperCase();
+              break;
+            }
+          }
+          break;
+        }
+      }
+      return { empName, month, year };
+    }
+
+    function extractTimesFromKijoSegment(seg) {
+      let s = seg.replace(/(\d{1,2})\s*:\s*(\d{2})/g, "$1:$2");
+      s = s.replace(/(\d{2})\.(\d{2})/g, "$1:$2");
+      s = s.replace(/\d?(\d{2})(\d{2}):/g, "$1:$2");
+
+      const times = [];
+      const regex = /(?<!\d)\d{0,2}(\d{2}):(\d{2})(?!\d)/g;
+      let m;
+      while ((m = regex.exec(s)) !== null) {
+        const hh = Number(m[1]);
+        const mm = Number(m[2]);
+        if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
+          times.push(String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0"));
+        }
+      }
+      return times;
+    }
+
+    function parseKijoCardPages(pagesText, fallbackName, overrideName) {
+      const combined = pagesText.join("
+");
+      const meta = extractKijoMetadata(combined, fallbackName);
+      const finalName = (overrideName || meta.empName || "EMPLOYEE").toUpperCase();
+
+      const dayMap = {};
+      let pendingRemark = "";
+
+      for (const rawLine of combined.split(/?
+/)) {
+        const line = rawLine.trim();
+        if (!line) continue;
+
+        if (/^(MRSM|MC|AL|EL|UL|LEAVE)$/i.test(line)) {
+          pendingRemark = line.toUpperCase();
+          continue;
+        }
+
+        const dayMatch = line.match(/^(\d{1,2})(?=\s|\||:|$|\d{3}:)/);
+        if (!dayMatch) continue;
+        const dayNum = Number(dayMatch[1]);
+        if (dayNum < 1 || dayNum > 31) continue;
+
+        const rest = line.slice(dayMatch[1].length);
+        const times = extractTimesFromKijoSegment(rest);
+
+        let remark = pendingRemark;
+        pendingRemark = "";
+        let dayType = "Auto";
+
+        if (/SUNDAY/i.test(rest)) {
+          dayType = "Sunday";
+          remark = "SUNDAY";
+        } else if (/PH/i.test(rest)) {
+          dayType = "Public Holiday";
+          remark = "PH";
+        } else if (/(MRSM|MC|AL|EL|UL|LEAVE)/i.test(rest)) {
+          const rm = rest.match(/(MRSM|MC|AL|EL|UL|LEAVE)/i);
+          dayType = "Leave / Outstation";
+          remark = rm[1].toUpperCase();
+        } else if (remark) {
+          dayType = "Leave / Outstation";
+        }
+
+        dayMap[dayNum] = {
+          day: dayNum,
+          date: `${meta.year}-${meta.month}-${String(dayNum).padStart(2, "0")}`,
+          times,
+          dayType,
+          remark
+        };
+      }
+
+      const sortedDays = Object.keys(dayMap).map(Number).sort((a, b) => a - b);
+      const parsedRows = [];
+
+      for (const d of sortedDays) {
+        const item = dayMap[d];
+        const times = [...item.times];
+        // Deduplicate overnight crossover clock-out printed on the following day (e.g. Day 15 00:07 -> Day 16 00:07)
+        if (parsedRows.length > 0 && parsedRows[parsedRows.length - 1].day === d - 1 && times.length >= 3) {
+          const prevOut = parsedRows[parsedRows.length - 1].clockOut;
+          if (prevOut && times[0] === prevOut) {
+            times.shift();
+          }
+        }
+
+        let clockIn = "";
+        let clockOut = "";
+        if (times.length >= 2) {
+          clockIn = times[0];
+          clockOut = times[times.length - 1];
+        } else if (times.length === 1) {
+          const hh = Number(times[0].split(":")[0]);
+          if (hh < 13) clockIn = times[0];
+          else clockOut = times[0];
+        }
+
+        const hasPunch = Boolean(clockIn || clockOut);
+        const isSpecialDay = item.dayType === "Sunday" || item.dayType === "Public Holiday" || item.dayType === "Leave / Outstation";
+
+        parsedRows.push({
+          selected: hasPunch || isSpecialDay,
+          day: d,
+          name: finalName,
+          date: item.date,
+          dayType: item.dayType,
+          clockIn,
+          clockOut,
+          remark: item.remark || (hasPunch ? "OCR Extracted" : "No Punch")
+        });
+      }
+
+      return { meta: { ...meta, empName: finalName }, rows: parsedRows, rawText: combined };
+    }
+
+    async function handleOcrFiles(fileList) {
+      if (!fileList || !fileList.length) return;
+      if (!window.Tesseract) {
+        alert("Tesseract.js is still loading from CDN. Please wait 2 seconds and try again.");
+        return;
+      }
+
+      const wrap = document.getElementById("ocrProgressWrap");
+      const statusEl = document.getElementById("ocrStatusText");
+      const pctEl = document.getElementById("ocrPercentText");
+      const barEl = document.getElementById("ocrProgressBar");
+      const applyContrast = document.getElementById("ocrEnhanceFilter").checked;
+      const overrideName = document.getElementById("ocrOverrideName").value.trim();
+
+      wrap.classList.remove("hidden");
+      stagedOcrRows = [];
+      let allRawBlocks = [];
+
+      try {
+        statusEl.textContent = "Starting Tesseract OCR worker...";
+        pctEl.textContent = "5%";
+        barEl.style.width = "5%";
+
+        const worker = await Tesseract.createWorker("eng", 1, {
+          logger: m => {
+            if (m.status === "recognizing text" && typeof m.progress === "number") {
+              const pct = Math.round(m.progress * 100);
+              pctEl.textContent = pct + "%";
+              barEl.style.width = pct + "%";
+            }
+          }
+        });
+
+        await worker.setParameters({
+          preserve_interword_spaces: "1"
+        });
+
+        for (let fIdx = 0; fIdx < fileList.length; fIdx++) {
+          const file = fileList[fIdx];
+          const baseName = file.name.replace(/\.[^.]+$/, "").replace(/[^A-Za-z0-9\s_-]/g, "").trim().toUpperCase() || "EMPLOYEE";
+          statusEl.textContent = `Preparing ${file.name} (${fIdx + 1}/${fileList.length})...`;
+
+          let canvases = [];
+          if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+            canvases = await renderPdfToCanvases(file);
+          } else {
+            const c = await loadImageFileToCanvas(file);
+            canvases = [c];
+          }
+
+          const pageTexts = [];
+          for (let pIdx = 0; pIdx < canvases.length; pIdx++) {
+            statusEl.textContent = `OCR Scanning ${file.name} — Page ${pIdx + 1} of ${canvases.length}...`;
+            const processed = preprocessCanvasForOcr(canvases[pIdx], applyContrast);
+            const { data: { text } } = await worker.recognize(processed);
+            pageTexts.push(text);
+            allRawBlocks.push(`=== ${file.name} (Page ${pIdx + 1}) ===
+${text}`);
+          }
+
+          const parsed = parseKijoCardPages(pageTexts, baseName, overrideName);
+          stagedOcrRows.push(...parsed.rows);
+        }
+
+        await worker.terminate();
+        statusEl.textContent = `OCR Complete! Extracted ${stagedOcrRows.length} day rows across ${fileList.length} file(s).`;
+        pctEl.textContent = "100%";
+        barEl.style.width = "100%";
+
+        document.getElementById("rawOcrTextarea").value = allRawBlocks.join("
+
+");
+        renderOcrStagingTable();
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = "OCR Error: " + (err.message || err);
+      } finally {
+        document.getElementById("ocrFileInput").value = "";
+      }
+    }
+
+    function renderOcrStagingTable() {
+      const panel = document.getElementById("ocrStagingPanel");
+      const tbody = document.getElementById("ocrStagingBody");
+      const metaEl = document.getElementById("ocrSummaryMeta");
+
+      if (!stagedOcrRows.length) {
+        panel.classList.add("hidden");
+        return;
+      }
+
+      panel.classList.remove("hidden");
+      const punchCount = stagedOcrRows.filter(r => r.clockIn || r.clockOut).length;
+      metaEl.textContent = `Detected ${stagedOcrRows.length} calendar rows (${punchCount} days with clock-in/out punches). Edit any field inline before importing.`;
+
+      tbody.innerHTML = stagedOcrRows.map((r, idx) => `
+        <tr class="${r.selected ? 'bg-white' : 'bg-slate-50 opacity-60'}">
+          <td class="px-2.5 py-1.5 text-center">
+            <input type="checkbox" ${r.selected ? "checked" : ""} onchange="stagedOcrRows[${idx}].selected = this.checked" />
+          </td>
+          <td class="px-2.5 py-1.5">
+            <input type="text" value="${r.name}" onchange="stagedOcrRows[${idx}].name = this.value.toUpperCase()" class="border border-slate-200 rounded px-1.5 py-0.5 w-28 font-semibold uppercase" />
+          </td>
+          <td class="px-2.5 py-1.5">
+            <input type="date" value="${r.date}" onchange="stagedOcrRows[${idx}].date = this.value" class="border border-slate-200 rounded px-1.5 py-0.5" />
+          </td>
+          <td class="px-2.5 py-1.5">
+            <select onchange="stagedOcrRows[${idx}].dayType = this.value" class="border border-slate-200 rounded px-1.5 py-0.5">
+              <option value="Auto" ${r.dayType === "Auto" ? "selected" : ""}>Auto</option>
+              <option value="Weekday" ${r.dayType === "Weekday" ? "selected" : ""}>Weekday</option>
+              <option value="Saturday" ${r.dayType === "Saturday" ? "selected" : ""}>Saturday</option>
+              <option value="Sunday" ${r.dayType === "Sunday" ? "selected" : ""}>Sunday</option>
+              <option value="Public Holiday" ${r.dayType === "Public Holiday" ? "selected" : ""}>Public Holiday</option>
+              <option value="Leave / Outstation" ${r.dayType === "Leave / Outstation" ? "selected" : ""}>Leave / Outstation</option>
+            </select>
+          </td>
+          <td class="px-2.5 py-1.5">
+            <input type="text" value="${r.clockIn}" placeholder="HH:MM" onchange="stagedOcrRows[${idx}].clockIn = cleanTimeToken(this.value)" class="border border-slate-200 rounded px-1.5 py-0.5 w-16 font-mono text-center" />
+          </td>
+          <td class="px-2.5 py-1.5">
+            <input type="text" value="${r.clockOut}" placeholder="HH:MM" onchange="stagedOcrRows[${idx}].clockOut = cleanTimeToken(this.value)" class="border border-slate-200 rounded px-1.5 py-0.5 w-16 font-mono text-center" />
+          </td>
+          <td class="px-2.5 py-1.5 text-slate-500">${r.remark}</td>
+        </tr>
+      `).join("");
+    }
+
+    function toggleRawOcrBox() {
+      document.getElementById("rawOcrContainer").classList.toggle("hidden");
+    }
+
+    function discardOcrStaging() {
+      stagedOcrRows = [];
+      document.getElementById("ocrStagingPanel").classList.add("hidden");
+      document.getElementById("ocrProgressWrap").classList.add("hidden");
+    }
+
+    function commitOcrStaging() {
+      const chosen = stagedOcrRows.filter(r => r.selected);
+      chosen.forEach(r => {
+        records.push({
+          name: (r.name || "EMPLOYEE").toUpperCase(),
+          date: r.date,
+          dayType: r.dayType,
+          clockIn: cleanTimeToken(r.clockIn),
+          clockOut: cleanTimeToken(r.clockOut),
+          breakMin: 0
+        });
+      });
+      discardOcrStaging();
+      recalculateAll();
+    }
+
+    // =========================================================================
+    // OT CALCULATION ENGINE
+    // =========================================================================
+    function computeRow(rec) {
+      const wkStart = timeToMins(document.getElementById("cfgWkStart").value) ?? 510;
+      const wkEnd = timeToMins(document.getElementById("cfgWkEnd").value) ?? 1050;
+      const satStart = timeToMins(document.getElementById("cfgSatStart").value) ?? 510;
+      const satEnd = timeToMins(document.getElementById("cfgSatEnd").value) ?? 780;
+      const grace = Number(document.getElementById("cfgGrace").value) || 0;
+      const minOt = Number(document.getElementById("cfgMinOt").value) || 0;
+      const roundStep = Number(document.getElementById("cfgRound").value) || 1;
+
+      const dtype = detectDayType(rec.date, rec.dayType);
+      const inM = timeToMins(rec.clockIn);
+      let outM = timeToMins(rec.clockOut);
+      const brk = Number(rec.breakMin) || 0;
+
+      if (inM !== null && outM !== null && outM < inM) {
+        outM += 1440;
+      } else if (inM === null && outM !== null && outM < 360) {
+        outM += 1440;
+      }
+
+      let lateMin = 0;
+      let rawOt = 0;
+      let mult = 1.5;
+
+      if (dtype === "Public Holiday") {
+        mult = 3.0;
+        if (inM !== null && outM !== null) rawOt = Math.max(0, outM - inM - brk);
+      } else if (dtype === "Sunday") {
+        mult = 2.0;
+        if (inM !== null && outM !== null) rawOt = Math.max(0, outM - inM - brk);
+      } else if (dtype === "Leave / Outstation") {
+        mult = 1.5;
+      } else {
+        const sStart = dtype === "Saturday" ? satStart : wkStart;
+        const sEnd = dtype === "Saturday" ? satEnd : wkEnd;
+        if (inM !== null) lateMin = Math.max(0, inM - sStart - grace);
+        if (outM !== null) rawOt = Math.max(0, outM - sEnd - brk);
+      }
+
+      let otMin = rawOt < minOt ? 0 : Math.floor(rawOt / roundStep) * roundStep;
+      const otHrs = otMin / 60;
+      const weightedHrs = otHrs * mult;
+      return { ...rec, resolvedDayType: dtype, lateMin, otMin, otHrs, mult, weightedHrs };
+    }
+
+    function recalculateAll() {
+      const computed = records.map(computeRow);
+      const empMap = {};
+      let totalOtMin = 0, totalLateMin = 0;
+
+      computed.forEach(r => {
+        totalOtMin += r.otMin;
+        totalLateMin += r.lateMin;
+        const key = (r.name || "UNKNOWN").toUpperCase();
+        if (!empMap[key]) empMap[key] = { name: key, count: 0, otMin: 0, lateMin: 0, weightedHrs: 0 };
+        if (r.clockIn || r.clockOut) empMap[key].count += 1;
+        empMap[key].otMin += r.otMin;
+        empMap[key].lateMin += r.lateMin;
+        empMap[key].weightedHrs += r.weightedHrs;
+      });
+
+      const empList = Object.values(empMap);
+      document.getElementById("kpiEmployees").textContent = empList.length;
+      document.getElementById("kpiOtMins").textContent = totalOtMin.toLocaleString() + " min";
+      document.getElementById("kpiOtHrs").textContent = (totalOtMin / 60).toFixed(2) + " hrs";
+      document.getElementById("kpiLateMins").textContent = totalLateMin.toLocaleString() + " min";
+      document.getElementById("rowCountBadge").textContent = computed.length + " rows";
+
+      const sumBody = document.getElementById("summaryTableBody");
+      sumBody.innerHTML = empList.map(e => `
+        <tr class="hover:bg-slate-50">
+          <td class="px-4 py-2.5 font-semibold text-slate-900">${e.name}</td>
+          <td class="px-4 py-2.5 text-center">${e.count}</td>
+          <td class="px-4 py-2.5 text-right font-bold text-teal-700">${e.otMin.toLocaleString()}</td>
+          <td class="px-4 py-2.5 text-right">${(e.otMin / 60).toFixed(2)}</td>
+          <td class="px-4 py-2.5 text-right text-amber-700">${e.lateMin.toLocaleString()}</td>
+          <td class="px-4 py-2.5 text-right font-medium">${e.weightedHrs.toFixed(2)}</td>
+        </tr>
+      `).join("") || `<tr><td colspan="6" class="px-4 py-6 text-center text-slate-400">No attendance rows loaded yet.</td></tr>`;
+
+      const logBody = document.getElementById("logTableBody");
+      logBody.innerHTML = computed.map((r, i) => `
+        <tr class="hover:bg-slate-50">
+          <td class="px-3 py-2 font-medium">${r.name}</td>
+          <td class="px-3 py-2">${r.date}</td>
+          <td class="px-3 py-2">${r.resolvedDayType}</td>
+          <td class="px-3 py-2 text-center font-mono">${r.clockIn || "-"}</td>
+          <td class="px-3 py-2 text-center font-mono">${r.clockOut || "-"}</td>
+          <td class="px-3 py-2 text-right">${r.breakMin || 0}</td>
+          <td class="px-3 py-2 text-right ${r.lateMin > 0 ? 'font-bold text-amber-700 bg-amber-50' : ''}">${r.lateMin}</td>
+          <td class="px-3 py-2 text-right ${r.otMin > 0 ? 'font-bold text-teal-700 bg-teal-50' : ''}">${r.otMin}</td>
+          <td class="px-3 py-2 text-right">${r.otHrs.toFixed(2)}</td>
+          <td class="px-3 py-2 text-center">${r.mult.toFixed(1)}x</td>
+          <td class="px-3 py-2 text-center"><button onclick="deleteRow(${i})" class="text-rose-600 hover:underline">Remove</button></td>
+        </tr>
+      `).join("");
+    }
+
+    function addEntryFromForm() {
+      const name = document.getElementById("inName").value.trim().toUpperCase() || "EMPLOYEE";
+      const date = document.getElementById("inDate").value;
+      const dayType = document.getElementById("inDayType").value;
+      const clockIn = cleanTimeToken(document.getElementById("inClockIn").value);
+      const clockOut = cleanTimeToken(document.getElementById("inClockOut").value);
+      const breakMin = Number(document.getElementById("inBreak").value) || 0;
+      records.push({ name, date, dayType, clockIn, clockOut, breakMin });
+      recalculateAll();
+    }
+
+    function deleteRow(idx) {
+      records.splice(idx, 1);
+      recalculateAll();
+    }
+
+    function clearAllRows() {
+      records = [];
+      recalculateAll();
+    }
+
+    function parseBulkPaste() {
+      const lines = document.getElementById("bulkPasteBox").value.split(/?
+/).filter(l => l.trim());
+      lines.forEach(line => {
+        const parts = line.split(/[,	]+/).map(p => p.trim());
+        if (parts.length >= 3) {
+          records.push({
+            name: (parts[0] || "EMPLOYEE").toUpperCase(),
+            date: parts[1] || "2026-10-01",
+            clockIn: cleanTimeToken(parts[2]),
+            clockOut: cleanTimeToken(parts[3] || ""),
+            dayType: parts[4] || "Auto",
+            breakMin: Number(parts[5]) || 0
+          });
+        }
+      });
+      document.getElementById("bulkPasteBox").value = "";
+      recalculateAll();
+    }
+
+    function handleFileUpload(evt) {
+      const file = evt.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const wb = XLSX.read(e.target.result, { type: "binary" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+        rows.forEach(r => {
+          const name = r["Employee Name"] || r["Name"] || r["Employee"] || "EMPLOYEE";
+          const date = String(r["Date"] || "2026-10-01").slice(0, 10);
+          const clockIn = cleanTimeToken(r["Clock In"] || r["In"] || "");
+          const clockOut = cleanTimeToken(r["Clock Out"] || r["Out"] || "");
+          const dayType = r["Day Type"] || "Auto";
+          const breakMin = Number(r["Break Deduct (Min)"] || r["Break"] || 0);
+          if (clockIn || clockOut) {
+            records.push({ name: String(name).toUpperCase(), date, dayType, clockIn, clockOut, breakMin });
+          }
+        });
+        recalculateAll();
+      };
+      reader.readAsBinaryString(file);
+    }
+
+    function exportToExcel() {
+      const computed = records.map(computeRow);
+      const wsData = computed.map(r => ({
+        "Employee Name": r.name,
+        "Date": r.date,
+        "Day Type": r.resolvedDayType,
+        "Clock In": r.clockIn,
+        "Clock Out": r.clockOut,
+        "Break Deduct (Min)": r.breakMin,
+        "Late (Min)": r.lateMin,
+        "OT Minutes": r.otMin,
+        "OT Hours": Number(r.otHrs.toFixed(2)),
+        "OT Multiplier": r.mult,
+        "Weighted OT Hours": Number(r.weightedHrs.toFixed(2))
+      }));
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(wsData);
+      XLSX.utils.book_append_sheet(wb, ws, "OT_Calculation_Report");
+      XLSX.writeFile(wb, "Employee_OT_Minutes_Report.xlsx");
+    }
+
+    function loadSampleData() {
+      const syazaOct2026 = [
+        ["2026-10-01", "07:16", "20:08", "Weekday"],
+        ["2026-10-02", "07:32", "19:42", "Weekday"],
+        ["2026-10-03", "08:13", "16:03", "Saturday"],
+        ["2026-10-05", "07:18", "20:01", "Weekday"],
+        ["2026-10-06", "08:07", "18:45", "Weekday"],
+        ["2026-10-07", "07:24", "20:33", "Weekday"],
+        ["2026-10-08", "07:21", "19:32", "Weekday"],
+        ["2026-10-09", "08:38", "21:23", "Weekday"],
+        ["2026-10-10", "08:36", "16:11", "Saturday"],
+        ["2026-10-12", "08:32", "18:02", "Weekday"],
+        ["2026-10-13", "08:36", "20:36", "Weekday"],
+        ["2026-10-14", "08:37", "21:27", "Weekday"],
+        ["2026-10-15", "08:47", "00:07", "Weekday"],
+        ["2026-10-16", "08:29", "19:49", "Weekday"],
+        ["2026-10-17", "08:28", "15:23", "Saturday"],
+        ["2026-10-20", "",      "19:41", "Weekday"],
+        ["2026-10-21", "07:13", "20:09", "Weekday"],
+        ["2026-10-22", "08:19", "21:05", "Weekday"],
+        ["2026-10-23", "07:24", "21:29", "Weekday"],
+        ["2026-10-24", "08:54", "19:19", "Saturday"],
+        ["2026-10-27", "08:28", "",      "Weekday"]
+      ];
+      records = syazaOct2026.map(([d, cin, cout, dt]) => ({
+        name: "SYAZA", date: d, dayType: dt, clockIn: cin, clockOut: cout, breakMin: 0
+      }));
+      recalculateAll();
+    }
+
+    loadSampleData();
+  </script>
+</body>
+</html>
