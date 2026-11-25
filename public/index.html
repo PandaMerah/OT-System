@@ -311,7 +311,7 @@
       let s = String(raw).trim();
       s = s.replace(/(\d{1,2})\s*:\s*(\d{2})/g, "$1:$2");
       s = s.replace(/(\d{2})\.(\d{2})/g, "$1:$2");
-      s = s.replace(/\d?(\d{2})(\d{2}):/g, "$1:$2");
+      s = s.replace(/\b\d?(\d{2})(\d{2}):/g, "$1:$2");
       const m = s.match(/(\d{1,2}:\d{2})$/);
       if (m) {
         let [hh, mm] = m[1].split(":").map(Number);
@@ -364,21 +364,124 @@
       ctx.drawImage(sourceCanvas, 0, 0, target.width, target.height);
 
       if (applyContrast) {
-        const imgData = ctx.getImageData(0, 0, target.width, target.height);
+        const w = target.width;
+        const h = target.height;
+        const imgData = ctx.getImageData(0, 0, w, h);
         const d = imgData.data;
-        const contrast = 1.45;
-        const intercept = 128 * (1 - contrast);
-        for (let i = 0; i < d.length; i += 4) {
-          const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-          let adj = lum * contrast + intercept;
-          // Suppress light tinted card gridlines while preserving dark punch ink
-          if (adj > 205) adj = 255;
-          else if (adj < 115) adj = 0;
-          d[i] = d[i + 1] = d[i + 2] = adj;
+
+        // Pass 1: Remove red circles/grid & blue grid, isolate dark/gray dot-matrix punches
+        const gray = new Uint8Array(w * h);
+        for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+          const r = d[i], g = d[i + 1], b = d[i + 2];
+          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+          const isRedInk = (r - Math.max(g, b)) > 20;
+          const isBlueGrid = (b - r) > 28 && g > 65 && lum > 75;
+
+          if (isRedInk || isBlueGrid || lum > 192) {
+            gray[p] = 255;
+          } else if (lum < 145) {
+            gray[p] = 0;
+          } else {
+            // Stretch faint dot-matrix gray (145..192) toward black
+            gray[p] = Math.max(0, Math.min(255, Math.round((lum - 145) * 4.2)));
+          }
+        }
+
+        // Pass 2: Light 3x3 morphological dilation (min-filter) to connect dot-matrix dots
+        const out = new Uint8Array(w * h);
+        out.fill(255);
+        for (let y = 1; y < h - 1; y++) {
+          const rowOff = y * w;
+          for (let x = 1; x < w - 1; x++) {
+            const idx = rowOff + x;
+            if (gray[idx] < 128) {
+              out[idx] = 0;
+              out[idx - 1] = Math.min(out[idx - 1], 40);
+              out[idx + 1] = Math.min(out[idx + 1], 40);
+              out[idx - w] = Math.min(out[idx - w], 40);
+              out[idx + w] = Math.min(out[idx + w], 40);
+            }
+          }
+        }
+
+        for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+          const v = out[p];
+          d[i] = d[i + 1] = d[i + 2] = v;
         }
         ctx.putImageData(imgData, 0, 0);
       }
       return target;
+    }
+
+    function detectKijoTableRows(sourceCanvas) {
+      const w = sourceCanvas.width;
+      const h = sourceCanvas.height;
+      const ctx = sourceCanvas.getContext("2d");
+      const imgData = ctx.getImageData(0, 0, w, h).data;
+
+      // Scan horizontal lines between 25% and 92% height for red or blue grid lines
+      const xStart = Math.floor(w * 0.12);
+      const xEnd = Math.floor(w * 0.88);
+      const span = xEnd - xStart;
+      const lineYs = [];
+
+      for (let y = Math.floor(h * 0.25); y < Math.floor(h * 0.92); y++) {
+        let coloredHits = 0;
+        const rowOff = y * w * 4;
+        for (let x = xStart; x < xEnd; x += 2) {
+          const i = rowOff + x * 4;
+          const r = imgData[i], g = imgData[i + 1], b = imgData[i + 2];
+          const isRedLine = (r - Math.max(g, b)) > 25;
+          const isBlueLine = (b - r) > 25 && lumCheck(r, g, b) < 220;
+          if (isRedLine || isBlueLine) coloredHits++;
+        }
+        if (coloredHits / (span / 2) > 0.45) {
+          if (!lineYs.length || y - lineYs[lineYs.length - 1] > Math.max(8, h * 0.012)) {
+            lineYs.push(y);
+          }
+        }
+      }
+
+      function lumCheck(r, g, b) {
+        return 0.299 * r + 0.587 * g + 0.114 * b;
+      }
+
+      // Find the sequence of 15 or 16 roughly equal-height rows (between 2.2% and 5.0% of card height)
+      const rowBoxes = [];
+      for (let i = 0; i < lineYs.length - 1; i++) {
+        const gap = lineYs[i + 1] - lineYs[i];
+        if (gap >= h * 0.022 && gap <= h * 0.052) {
+          rowBoxes.push({ y1: lineYs[i], y2: lineYs[i + 1], h: gap });
+        }
+      }
+
+      // Filter out the empty sub-header row if 16-17 boxes were found with first box being the blank row above day 1/16
+      if (rowBoxes.length >= 16) {
+        // Keep the last 15 (Page 1) or 16 (Page 2) contiguous boxes
+        const diffs = [];
+        for (let i = 0; i < rowBoxes.length; i++) {
+          if (i > 0 && rowBoxes[i].y1 - rowBoxes[i - 1].y2 > h * 0.01) {
+            // Gap between header and table
+            return { headerBottomY: rowBoxes[i].y1, rowBoxes: rowBoxes.slice(i) };
+          }
+        }
+      }
+
+      return {
+        headerBottomY: rowBoxes.length ? rowBoxes[0].y1 : Math.floor(h * 0.35),
+        rowBoxes
+      };
+    }
+
+    function cropCanvasRegion(canvas, x, y, w, h, pad = 16) {
+      const out = document.createElement("canvas");
+      out.width = w + pad * 2;
+      out.height = h + pad * 2;
+      const ctx = out.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, out.width, out.height);
+      ctx.drawImage(canvas, x, y, w, h, pad, pad, w, h);
+      return out;
     }
 
     async function renderPdfToCanvases(file) {
@@ -424,10 +527,10 @@
       let month = String(new Date().getMonth() + 1).padStart(2, "0");
       let year = String(new Date().getFullYear());
 
-      const ym = text.match(/(20\d{2})/);
+      const ym = text.match(/\b(20\d{2})\b/);
       if (ym) year = ym[1];
 
-      const mm = text.match(/(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)/i);
+      const mm = text.match(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/i);
       if (mm) month = MONTH_MAP[mm[1].toUpperCase()];
 
       const skipWords = new Set([
@@ -437,8 +540,8 @@
       ]);
 
       for (let i = 0; i < lines.length; i++) {
-        if (/Name/i.test(lines[i])) {
-          const after = lines[i].replace(/.*Name[:\s|]*/i, "").replace(/[^A-Za-z\s'.-]/g, "").trim();
+        if (/\bName\b/i.test(lines[i])) {
+          const after = lines[i].replace(/.*\bName\b[:\s|]*/i, "").replace(/[^A-Za-z\s'.-]/g, "").trim();
           if (after && !skipWords.has(after.toUpperCase()) && after.length >= 2) {
             empName = after.toUpperCase();
             break;
@@ -459,7 +562,7 @@
     function extractTimesFromKijoSegment(seg) {
       let s = seg.replace(/(\d{1,2})\s*:\s*(\d{2})/g, "$1:$2");
       s = s.replace(/(\d{2})\.(\d{2})/g, "$1:$2");
-      s = s.replace(/\d?(\d{2})(\d{2}):/g, "$1:$2");
+      s = s.replace(/\b\d?(\d{2})(\d{2}):/g, "$1:$2");
 
       const times = [];
       const regex = /(?<!\d)\d{0,2}(\d{2}):(\d{2})(?!\d)/g;
@@ -503,14 +606,14 @@
         pendingRemark = "";
         let dayType = "Auto";
 
-        if (/SUNDAY/i.test(rest)) {
+        if (/\bSUNDAY\b/i.test(rest)) {
           dayType = "Sunday";
           remark = "SUNDAY";
-        } else if (/PH/i.test(rest)) {
+        } else if (/\bPH\b/i.test(rest)) {
           dayType = "Public Holiday";
           remark = "PH";
-        } else if (/(MRSM|MC|AL|EL|UL|LEAVE)/i.test(rest)) {
-          const rm = rest.match(/(MRSM|MC|AL|EL|UL|LEAVE)/i);
+        } else if (/\b(MRSM|MC|AL|EL|UL|LEAVE)\b/i.test(rest)) {
+          const rm = rest.match(/\b(MRSM|MC|AL|EL|UL|LEAVE)\b/i);
           dayType = "Leave / Outstation";
           remark = rm[1].toUpperCase();
         } else if (remark) {
@@ -622,10 +725,64 @@
           const pageTexts = [];
           for (let pIdx = 0; pIdx < canvases.length; pIdx++) {
             statusEl.textContent = `OCR Scanning ${file.name} — Page ${pIdx + 1} of ${canvases.length}...`;
-            const processed = preprocessCanvasForOcr(canvases[pIdx], applyContrast);
-            const { data: { text } } = await worker.recognize(processed);
-            pageTexts.push(text);
-            allRawBlocks.push(`=== ${file.name} (Page ${pIdx + 1}) ===\n${text}`);
+            const srcCanvas = canvases[pIdx];
+            const processed = preprocessCanvasForOcr(srcCanvas, applyContrast);
+            const tableInfo = detectKijoTableRows(srcCanvas);
+
+            const expectedCount = (pIdx % 2 === 0) ? 15 : 16;
+            const startDay = (pIdx % 2 === 0) ? 1 : 16;
+
+            if (tableInfo.rowBoxes.length >= expectedCount) {
+              const dataRows = tableInfo.rowBoxes.slice(-expectedCount);
+              const scale = processed.width / srcCanvas.width;
+
+              // OCR Header from source canvas (preserves blue pen Name, Month, Year)
+              const headerCanvas = cropCanvasRegion(srcCanvas, 0, 0, srcCanvas.width, Math.max(50, tableInfo.headerBottomY), 10);
+              const headerRes = await worker.recognize(headerCanvas);
+              const pageLines = [headerRes.data.text];
+
+              const xLeft = Math.floor(processed.width * 0.08);
+              const xWidth = Math.floor(processed.width * 0.84);
+              const srcXLeft = Math.floor(srcCanvas.width * 0.08);
+              const srcXWidth = Math.floor(srcCanvas.width * 0.84);
+
+              for (let rIdx = 0; rIdx < dataRows.length; rIdx++) {
+                const dayNum = startDay + rIdx;
+                statusEl.textContent = `OCR Scanning ${file.name} (Page ${pIdx + 1}) — Day ${dayNum}...`;
+                const box = dataRows[rIdx];
+
+                // Crop slightly inside top/bottom grid lines to avoid border artifacts
+                const padY = Math.max(2, Math.floor(box.h * 0.06));
+                const ry = Math.round((box.y1 + padY) * scale);
+                const rh = Math.max(10, Math.round((box.h - padY * 2) * scale));
+                const rowCanvas = cropCanvasRegion(processed, xLeft, ry, xWidth, rh, 20);
+
+                await worker.setParameters({ tessedit_pageseg_mode: "6", preserve_interword_spaces: "1" });
+                const rowRes = await worker.recognize(rowCanvas);
+                let rowText = rowRes.data.text.replace(/\s+/g, " ").trim();
+
+                // If no punch times found, check original color crop for red handwritten SUNDAY / PH / MRSM
+                if (extractTimesFromKijoSegment(rowText).length === 0) {
+                  const rawRowCanvas = cropCanvasRegion(srcCanvas, srcXLeft, box.y1 + padY, srcXWidth, Math.max(10, box.h - padY * 2), 16);
+                  const rawRowRes = await worker.recognize(rawRowCanvas);
+                  const rawText = rawRowRes.data.text.replace(/\s+/g, " ").trim();
+                  if (/\b(SUNDAY|PH|MRSM|MC|AL|EL|UL|LEAVE)\b/i.test(rawText)) {
+                    rowText = rawText;
+                  }
+                }
+
+                pageLines.push(`${dayNum} ${rowText}`);
+              }
+
+              const text = pageLines.join("\n");
+              pageTexts.push(text);
+              allRawBlocks.push(`=== ${file.name} (Page ${pIdx + 1} - Row OCR) ===\n${text}`);
+            } else {
+              await worker.setParameters({ tessedit_pageseg_mode: "3", preserve_interword_spaces: "1" });
+              const { data: { text } } = await worker.recognize(processed);
+              pageTexts.push(text);
+              allRawBlocks.push(`=== ${file.name} (Page ${pIdx + 1}) ===\n${text}`);
+            }
           }
 
           const parsed = parseKijoCardPages(pageTexts, baseName, overrideName);
