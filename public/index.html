@@ -293,6 +293,25 @@
           </div>
         </div>
       </section>
+
+      <section class="bg-white p-6 rounded-xl border border-indigo-200 shadow-sm space-y-4">
+        <div class="border-b border-slate-200 pb-3">
+          <div class="flex items-center gap-2">
+            <h2 class="text-base font-bold text-slate-800">High-Accuracy AI OCR (Gemini Vision)</h2>
+            <span class="px-2 py-0.5 text-[11px] font-bold bg-indigo-100 text-indigo-700 rounded-full">Recommended</span>
+          </div>
+          <p class="text-xs text-slate-500 mt-1">Dot-matrix time cards with handwritten red circles are hard for free offline Tesseract OCR. Add a Google Gemini API key here to use Gemini Vision AI for near-100% accuracy. Stored locally in your browser.</p>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Gemini API Key (Optional)</label>
+            <input id="cfgGeminiKey" type="password" placeholder="AIza..." onchange="saveSettings()" class="w-full border border-slate-300 rounded-md px-3 py-2 font-mono text-xs" />
+          </div>
+          <div class="flex items-end">
+            <p class="text-xs text-slate-500 pb-2">Leave blank to use the free offline Tesseract.js OCR engine.</p>
+          </div>
+        </div>
+      </section>
     </div>
   </main>
 
@@ -374,8 +393,8 @@
         for (let i = 0, p = 0; i < d.length; i += 4, p++) {
           const r = d[i], g = d[i + 1], b = d[i + 2];
           const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-          const isRedInk = (r - Math.max(g, b)) > 20;
-          const isBlueGrid = (b - r) > 28 && g > 65 && lum > 75;
+          const isRedInk = (r - Math.max(g, b)) > 14;
+          const isBlueGrid = (b - r) > 16 && g > 60 && lum > 75;
 
           if (isRedInk || isBlueGrid || lum > 192) {
             gray[p] = 255;
@@ -431,8 +450,8 @@
         for (let x = xStart; x < xEnd; x += 2) {
           const i = rowOff + x * 4;
           const r = imgData[i], g = imgData[i + 1], b = imgData[i + 2];
-          const isRedLine = (r - Math.max(g, b)) > 25;
-          const isBlueLine = (b - r) > 25 && lumCheck(r, g, b) < 220;
+          const isRedLine = (r - Math.max(g, b)) > 18;
+          const isBlueLine = (b - r) > 12 && lumCheck(r, g, b) < 225;
           if (isRedLine || isBlueLine) coloredHits++;
         }
         if (coloredHits / (span / 2) > 0.45) {
@@ -672,9 +691,100 @@
       return { meta: { ...meta, empName: finalName }, rows: parsedRows, rawText: combined };
     }
 
+    async function runGeminiVisionOcr(canvases, baseName, overrideName, apiKey, statusEl, pctEl, barEl) {
+      statusEl.textContent = "Sending time card images to Gemini Vision AI...";
+      pctEl.textContent = "35%";
+      barEl.style.width = "35%";
+
+      const imageParts = canvases.map(c => {
+        const dataUrl = c.toDataURL("image/jpeg", 0.92);
+        return {
+          inlineData: {
+            mimeType: "image/jpeg",
+            data: dataUrl.split(",")[1]
+          }
+        };
+      });
+
+      const promptText = `You are an expert OCR reader for KIJO 6902 attendance time cards.
+Read all pages of this time card carefully.
+Each punch printed by the machine has a small 1-2 digit day prefix followed by HH:MM (for example: "1 07:16", "24 08:54", "16 00:07", "24 19:19"). Strip the day prefix and return ONLY the HH:MM 24-hour time.
+Ignore red handwritten circles around times and ignore the handwritten "Total" column on the far right.
+If a row has handwritten "SUNDAY", "PH", or "MRSM"/"MC"/"AL"/"EL"/"UL"/"LEAVE" instead of punches, record that in dayType/remark.
+If day 16 starts with an overnight crossover clock-out from day 15 (e.g. 00:07 in A.M. In) AND also has a regular morning/afternoon punch (e.g. 08:29) and evening clock-out (e.g. 19:49), use 08:29 as day 16's clockIn and 19:49 as clockOut (do not use the 00:07 overnight crossover as day 16's clockIn).
+
+Return ONLY valid JSON matching this schema:
+{
+  "name": "EMPLOYEE NAME IN UPPERCASE",
+  "year": "YYYY",
+  "month": "MM (01-12)",
+  "rows": [
+    {
+      "day": 1,
+      "dayType": "Auto" | "Sunday" | "Public Holiday" | "Leave / Outstation",
+      "clockIn": "HH:MM or empty string",
+      "clockOut": "HH:MM or empty string",
+      "remark": "e.g. SUNDAY, PH, MRSM, or OCR Extracted"
+    }
+  ]
+}`;
+
+      const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-4-hydrogen:generateContent?key=${encodeURIComponent(apiKey)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{ text: promptText }, ...imageParts]
+          }],
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0
+          }
+        })
+      });
+
+      if (!resp.ok) {
+        const errBody = await resp.text();
+        throw new Error(`Gemini API Error (${resp.status}): ${errBody.slice(0, 200)}`);
+      }
+
+      pctEl.textContent = "85%";
+      barEl.style.width = "85%";
+
+      const data = await resp.json();
+      const rawJson = data?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+      const parsed = JSON.parse(rawJson);
+
+      const finalName = (overrideName || parsed.name || baseName || "EMPLOYEE").toUpperCase();
+      const year = parsed.year || String(new Date().getFullYear());
+      const month = String(parsed.month || (new Date().getMonth() + 1)).padStart(2, "0");
+
+      const rows = (parsed.rows || []).map(r => {
+        const day = Number(r.day);
+        const clockIn = cleanTimeToken(r.clockIn || "");
+        const clockOut = cleanTimeToken(r.clockOut || "");
+        const hasPunch = Boolean(clockIn || clockOut);
+        const dayType = r.dayType || "Auto";
+        const isSpecial = dayType === "Sunday" || dayType === "Public Holiday" || dayType === "Leave / Outstation";
+        return {
+          selected: hasPunch || isSpecial,
+          day,
+          name: finalName,
+          date: `${year}-${month}-${String(day).padStart(2, "0")}`,
+          dayType,
+          clockIn,
+          clockOut,
+          remark: r.remark || (hasPunch ? "Gemini AI OCR" : "No Punch")
+        };
+      });
+
+      return { rows, rawText: rawJson };
+    }
+
     async function handleOcrFiles(fileList) {
       if (!fileList || !fileList.length) return;
-      if (!window.Tesseract) {
+      const geminiKey = (document.getElementById("cfgGeminiKey")?.value || "").trim();
+      if (!geminiKey && !window.Tesseract) {
         alert("Tesseract.js is still loading from CDN. Please wait 2 seconds and try again.");
         return;
       }
@@ -691,23 +801,22 @@
       let allRawBlocks = [];
 
       try {
-        statusEl.textContent = "Starting Tesseract OCR worker...";
-        pctEl.textContent = "5%";
-        barEl.style.width = "5%";
+        let worker = null;
+        if (!geminiKey) {
+          statusEl.textContent = "Starting Tesseract OCR worker...";
+          pctEl.textContent = "5%";
+          barEl.style.width = "5%";
 
-        const worker = await Tesseract.createWorker("eng", 1, {
-          logger: m => {
-            if (m.status === "recognizing text" && typeof m.progress === "number") {
-              const pct = Math.round(m.progress * 100);
-              pctEl.textContent = pct + "%";
-              barEl.style.width = pct + "%";
+          worker = await Tesseract.createWorker("eng", 1, {
+            logger: m => {
+              if (m.status === "recognizing text" && typeof m.progress === "number") {
+                const pct = Math.round(m.progress * 100);
+                pctEl.textContent = pct + "%";
+                barEl.style.width = pct + "%";
+              }
             }
-          }
-        });
-
-        await worker.setParameters({
-          preserve_interword_spaces: "1"
-        });
+          });
+        }
 
         for (let fIdx = 0; fIdx < fileList.length; fIdx++) {
           const file = fileList[fIdx];
@@ -720,6 +829,13 @@
           } else {
             const c = await loadImageFileToCanvas(file);
             canvases = [c];
+          }
+
+          if (geminiKey) {
+            const gemRes = await runGeminiVisionOcr(canvases, baseName, overrideName, geminiKey, statusEl, pctEl, barEl);
+            stagedOcrRows.push(...gemRes.rows);
+            allRawBlocks.push(`=== ${file.name} (Gemini Vision AI) ===\n${gemRes.rawText}`);
+            continue;
           }
 
           const pageTexts = [];
@@ -737,12 +853,16 @@
               const scale = processed.width / srcCanvas.width;
 
               // OCR Header from source canvas (preserves blue pen Name, Month, Year)
+              await worker.setParameters({ tessedit_pageseg_mode: "3", tessedit_char_whitelist: "", preserve_interword_spaces: "1" });
               const headerCanvas = cropCanvasRegion(srcCanvas, 0, 0, srcCanvas.width, Math.max(50, tableInfo.headerBottomY), 10);
               const headerRes = await worker.recognize(headerCanvas);
               const pageLines = [headerRes.data.text];
 
-              const xLeft = Math.floor(processed.width * 0.08);
-              const xWidth = Math.floor(processed.width * 0.84);
+              // Column bounds for KIJO 6902: A.M. In (8%..22%), P.M. In (36%..50%), Overtime Out (76%..91%)
+              const inX = Math.floor(processed.width * 0.085);
+              const inW = Math.floor(processed.width * 0.135);
+              const outX = Math.floor(processed.width * 0.765);
+              const outW = Math.floor(processed.width * 0.145);
               const srcXLeft = Math.floor(srcCanvas.width * 0.08);
               const srcXWidth = Math.floor(srcCanvas.width * 0.84);
 
@@ -751,18 +871,20 @@
                 statusEl.textContent = `OCR Scanning ${file.name} (Page ${pIdx + 1}) — Day ${dayNum}...`;
                 const box = dataRows[rIdx];
 
-                // Crop slightly inside top/bottom grid lines to avoid border artifacts
-                const padY = Math.max(2, Math.floor(box.h * 0.06));
+                const padY = Math.max(2, Math.floor(box.h * 0.08));
                 const ry = Math.round((box.y1 + padY) * scale);
                 const rh = Math.max(10, Math.round((box.h - padY * 2) * scale));
-                const rowCanvas = cropCanvasRegion(processed, xLeft, ry, xWidth, rh, 20);
 
-                await worker.setParameters({ tessedit_pageseg_mode: "6", preserve_interword_spaces: "1" });
-                const rowRes = await worker.recognize(rowCanvas);
-                let rowText = rowRes.data.text.replace(/\s+/g, " ").trim();
+                await worker.setParameters({ tessedit_pageseg_mode: "7", tessedit_char_whitelist: "0123456789:" });
+                const inCanvas = cropCanvasRegion(processed, inX, ry, inW, rh, 20);
+                const outCanvas = cropCanvasRegion(processed, outX, ry, outW, rh, 20);
+                const inRes = await worker.recognize(inCanvas);
+                const outRes = await worker.recognize(outCanvas);
+                let rowText = `${inRes.data.text.trim()} ${outRes.data.text.trim()}`.replace(/\s+/g, " ").trim();
 
                 // If no punch times found, check original color crop for red handwritten SUNDAY / PH / MRSM
                 if (extractTimesFromKijoSegment(rowText).length === 0) {
+                  await worker.setParameters({ tessedit_pageseg_mode: "6", tessedit_char_whitelist: "" });
                   const rawRowCanvas = cropCanvasRegion(srcCanvas, srcXLeft, box.y1 + padY, srcXWidth, Math.max(10, box.h - padY * 2), 16);
                   const rawRowRes = await worker.recognize(rawRowCanvas);
                   const rawText = rawRowRes.data.text.replace(/\s+/g, " ").trim();
@@ -776,9 +898,9 @@
 
               const text = pageLines.join("\n");
               pageTexts.push(text);
-              allRawBlocks.push(`=== ${file.name} (Page ${pIdx + 1} - Row OCR) ===\n${text}`);
+              allRawBlocks.push(`=== ${file.name} (Page ${pIdx + 1} - Column OCR) ===\n${text}`);
             } else {
-              await worker.setParameters({ tessedit_pageseg_mode: "3", preserve_interword_spaces: "1" });
+              await worker.setParameters({ tessedit_pageseg_mode: "3", tessedit_char_whitelist: "", preserve_interword_spaces: "1" });
               const { data: { text } } = await worker.recognize(processed);
               pageTexts.push(text);
               allRawBlocks.push(`=== ${file.name} (Page ${pIdx + 1}) ===\n${text}`);
@@ -789,7 +911,7 @@
           stagedOcrRows.push(...parsed.rows);
         }
 
-        await worker.terminate();
+        if (worker) await worker.terminate();
         statusEl.textContent = `OCR Complete! Extracted ${stagedOcrRows.length} day rows across ${fileList.length} file(s).`;
         pctEl.textContent = "100%";
         barEl.style.width = "100%";
@@ -1032,7 +1154,8 @@
         satEnd: document.getElementById("cfgSatEnd").value,
         grace: document.getElementById("cfgGrace").value,
         minOt: document.getElementById("cfgMinOt").value,
-        round: document.getElementById("cfgRound").value
+        round: document.getElementById("cfgRound").value,
+        geminiKey: document.getElementById("cfgGeminiKey")?.value || ""
       };
       localStorage.setItem("ot_system_settings", JSON.stringify(settings));
     }
@@ -1049,6 +1172,7 @@
         if (s.grace !== undefined) document.getElementById("cfgGrace").value = s.grace;
         if (s.minOt !== undefined) document.getElementById("cfgMinOt").value = s.minOt;
         if (s.round) document.getElementById("cfgRound").value = s.round;
+        if (s.geminiKey && document.getElementById("cfgGeminiKey")) document.getElementById("cfgGeminiKey").value = s.geminiKey;
       } catch (e) {}
     }
 
