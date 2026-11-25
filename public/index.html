@@ -24,15 +24,20 @@
         </div>
         <p class="text-xs text-slate-300 mt-0.5">Client-Side KIJO 6902 PDF/Photo OCR • Multi-Employee Rollup • Excel/CSV Import & Export</p>
       </div>
-      <div class="flex flex-wrap gap-2">
-        <button onclick="loadSampleData()" class="px-3 py-1.5 text-xs font-medium bg-slate-700 hover:bg-slate-600 rounded-md transition">Load SYAZA Sample (Oct 2026)</button>
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="inline-flex rounded-lg bg-slate-800 p-1 mr-2">
+          <button id="tabMainBtn" onclick="switchPage('main')" class="px-3 py-1 text-xs font-semibold rounded-md bg-teal-600 text-white transition">Main</button>
+          <button id="tabSettingsBtn" onclick="switchPage('settings')" class="px-3 py-1 text-xs font-semibold rounded-md text-slate-300 hover:text-white transition">Settings</button>
+        </div>
+        <button onclick="loadSampleData()" class="px-3 py-1.5 text-xs font-medium bg-slate-700 hover:bg-slate-600 rounded-md transition">Load Sample</button>
         <button onclick="clearAllRows()" class="px-3 py-1.5 text-xs font-medium bg-rose-700 hover:bg-rose-600 rounded-md transition">Clear Logs</button>
         <button onclick="exportToExcel()" class="px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 rounded-md shadow transition">Export Excel (.xlsx)</button>
       </div>
     </div>
   </header>
 
-  <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
+  <main class="max-w-7xl mx-auto px-4 py-6">
+    <div id="mainPage" class="space-y-6">
     <!-- KPI Cards -->
     <section class="grid grid-cols-2 lg:grid-cols-4 gap-4">
       <div class="bg-white p-4 rounded-xl border border-slate-200 border-l-4 border-l-slate-800 shadow-sm">
@@ -134,46 +139,6 @@
       </div>
     </section>
 
-    <!-- Shift & OT Rule Configuration -->
-    <section class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-      <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 mb-3">Shift & Overtime Calculation Rules</h2>
-      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 text-sm">
-        <div>
-          <label class="block text-xs font-medium text-slate-500 mb-1">Weekday Start</label>
-          <input id="cfgWkStart" type="time" value="08:30" onchange="recalculateAll()" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-slate-500 mb-1">Weekday OT After</label>
-          <input id="cfgWkEnd" type="time" value="17:30" onchange="recalculateAll()" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-slate-500 mb-1">Saturday Start</label>
-          <input id="cfgSatStart" type="time" value="08:30" onchange="recalculateAll()" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-slate-500 mb-1">Saturday OT After</label>
-          <input id="cfgSatEnd" type="time" value="13:00" onchange="recalculateAll()" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-slate-500 mb-1">Grace Period (min)</label>
-          <input id="cfgGrace" type="number" min="0" value="0" onchange="recalculateAll()" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-slate-500 mb-1">Min OT Cutoff (min)</label>
-          <input id="cfgMinOt" type="number" min="0" value="0" onchange="recalculateAll()" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-slate-500 mb-1">Round Down (min)</label>
-          <select id="cfgRound" onchange="recalculateAll()" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5">
-            <option value="1" selected>Exact (1 min)</option>
-            <option value="5">5 mins</option>
-            <option value="15">15 mins</option>
-            <option value="30">30 mins</option>
-          </select>
-        </div>
-      </div>
-    </section>
-
     <!-- Employee Summary Rollup -->
     <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       <div class="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
@@ -197,54 +162,42 @@
       </div>
     </section>
 
-    <!-- Add Single Punch / Bulk Import -->
-    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 mb-3">Add Clock-In / Clock-Out Entry</h2>
-        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
-          <div>
-            <label class="block text-xs font-medium text-slate-500 mb-1">Employee Name</label>
-            <input id="inName" type="text" placeholder="e.g. SYAZA" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-500 mb-1">Date</label>
-            <input id="inDate" type="date" value="2026-10-01" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-500 mb-1">Day Type</label>
-            <select id="inDayType" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5">
-              <option value="Auto">Auto (From Date)</option>
-              <option value="Weekday">Weekday (1.5x)</option>
-              <option value="Saturday">Saturday (1.5x)</option>
-              <option value="Sunday">Sunday (2.0x)</option>
-              <option value="Public Holiday">Public Holiday (3.0x)</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-500 mb-1">Clock In (HH:MM)</label>
-            <input id="inClockIn" type="text" placeholder="07:16" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-500 mb-1">Clock Out (HH:MM)</label>
-            <input id="inClockOut" type="text" placeholder="20:08" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-500 mb-1">Break Deduct (Min)</label>
-            <input id="inBreak" type="number" min="0" value="0" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
-          </div>
+    <!-- Add Manual Clock-In / Clock-Out Entry -->
+    <section class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 mb-3">Add Manual Clock-In / Clock-Out Entry</h2>
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-sm">
+        <div>
+          <label class="block text-xs font-medium text-slate-500 mb-1">Employee Name</label>
+          <input id="inName" type="text" placeholder="e.g. SYAZA" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
         </div>
-        <button onclick="addEntryFromForm()" class="mt-4 w-full py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-md transition">+ Add Attendance Record</button>
-      </div>
-
-      <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-700 mb-1">Bulk Paste or Import CSV / Excel</h2>
-        <p class="text-xs text-slate-500 mb-2">Format per line: <code class="bg-slate-100 px-1 rounded">Name, YYYY-MM-DD, ClockIn, ClockOut, DayType(optional)</code>. Automatically cleans KIJO OCR marks (e.g. <code>807:16</code> &rarr; <code>07:16</code>).</p>
-        <textarea id="bulkPasteBox" rows="3" placeholder="SYAZA, 2026-10-01, 807:16, 20:08&#10;AHMAD, 2026-10-01, 08:25, 19:45" class="w-full border border-slate-300 rounded-md p-2 text-xs font-mono"></textarea>
-        <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
-          <input id="fileUpload" type="file" accept=".csv,.xlsx,.xls" onchange="handleFileUpload(event)" class="text-xs text-slate-600" />
-          <button onclick="parseBulkPaste()" class="px-4 py-1.5 bg-teal-700 hover:bg-teal-600 text-white text-xs font-semibold rounded-md transition">Import Pasted Lines</button>
+        <div>
+          <label class="block text-xs font-medium text-slate-500 mb-1">Date</label>
+          <input id="inDate" type="date" value="2026-10-01" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-500 mb-1">Day Type</label>
+          <select id="inDayType" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5">
+            <option value="Auto">Auto (From Date)</option>
+            <option value="Weekday">Weekday (1.5x)</option>
+            <option value="Saturday">Saturday (1.5x)</option>
+            <option value="Sunday">Sunday (2.0x)</option>
+            <option value="Public Holiday">Public Holiday (3.0x)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-500 mb-1">Clock In (HH:MM)</label>
+          <input id="inClockIn" type="text" placeholder="07:16" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-500 mb-1">Clock Out (HH:MM)</label>
+          <input id="inClockOut" type="text" placeholder="20:08" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-500 mb-1">Break Deduct (Min)</label>
+          <input id="inBreak" type="number" min="0" value="0" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
         </div>
       </div>
+      <button onclick="addEntryFromForm()" class="mt-4 w-full sm:w-auto px-6 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-md transition">+ Add Attendance Record</button>
     </section>
 
     <!-- Detailed Attendance Table -->
@@ -274,6 +227,55 @@
         </table>
       </div>
     </section>
+    </div>
+
+    <!-- Settings Page -->
+    <div id="settingsPage" class="hidden space-y-6">
+      <section class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-5">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-200 pb-4">
+          <div>
+            <h2 class="text-base font-bold text-slate-800">Shift & Overtime Calculation Settings</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Configure standard start times, OT cutoffs, grace period, and rounding rules. Changes apply immediately and are saved automatically.</p>
+          </div>
+          <button onclick="resetSettings()" class="px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition self-start sm:self-auto">Reset to Defaults</button>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Weekday Start</label>
+            <input id="cfgWkStart" type="time" value="08:30" onchange="saveSettings(); recalculateAll();" class="w-full border border-slate-300 rounded-md px-3 py-2" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Weekday OT After</label>
+            <input id="cfgWkEnd" type="time" value="17:30" onchange="saveSettings(); recalculateAll();" class="w-full border border-slate-300 rounded-md px-3 py-2" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Saturday Start</label>
+            <input id="cfgSatStart" type="time" value="08:30" onchange="saveSettings(); recalculateAll();" class="w-full border border-slate-300 rounded-md px-3 py-2" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Saturday OT After</label>
+            <input id="cfgSatEnd" type="time" value="13:00" onchange="saveSettings(); recalculateAll();" class="w-full border border-slate-300 rounded-md px-3 py-2" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Grace Period (min)</label>
+            <input id="cfgGrace" type="number" min="0" value="0" onchange="saveSettings(); recalculateAll();" class="w-full border border-slate-300 rounded-md px-3 py-2" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Min OT Cutoff (min)</label>
+            <input id="cfgMinOt" type="number" min="0" value="0" onchange="saveSettings(); recalculateAll();" class="w-full border border-slate-300 rounded-md px-3 py-2" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Round Down (min)</label>
+            <select id="cfgRound" onchange="saveSettings(); recalculateAll();" class="w-full border border-slate-300 rounded-md px-3 py-2">
+              <option value="1" selected>Exact (1 min)</option>
+              <option value="5">5 mins</option>
+              <option value="15">15 mins</option>
+              <option value="30">30 mins</option>
+            </select>
+          </div>
+        </div>
+      </section>
+    </div>
   </main>
 
   <script>
@@ -399,8 +401,7 @@
     }
 
     function extractKijoMetadata(text, fallbackName) {
-      const lines = text.split(/?
-/).map(l => l.trim()).filter(Boolean);
+      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
       let empName = fallbackName || "EMPLOYEE";
       let month = String(new Date().getMonth() + 1).padStart(2, "0");
       let year = String(new Date().getFullYear());
@@ -456,16 +457,14 @@
     }
 
     function parseKijoCardPages(pagesText, fallbackName, overrideName) {
-      const combined = pagesText.join("
-");
+      const combined = pagesText.join("\n");
       const meta = extractKijoMetadata(combined, fallbackName);
       const finalName = (overrideName || meta.empName || "EMPLOYEE").toUpperCase();
 
       const dayMap = {};
       let pendingRemark = "";
 
-      for (const rawLine of combined.split(/?
-/)) {
+      for (const rawLine of combined.split(/\r?\n/)) {
         const line = rawLine.trim();
         if (!line) continue;
 
@@ -608,8 +607,7 @@
             const processed = preprocessCanvasForOcr(canvases[pIdx], applyContrast);
             const { data: { text } } = await worker.recognize(processed);
             pageTexts.push(text);
-            allRawBlocks.push(`=== ${file.name} (Page ${pIdx + 1}) ===
-${text}`);
+            allRawBlocks.push(`=== ${file.name} (Page ${pIdx + 1}) ===\n${text}`);
           }
 
           const parsed = parseKijoCardPages(pageTexts, baseName, overrideName);
@@ -621,9 +619,7 @@ ${text}`);
         pctEl.textContent = "100%";
         barEl.style.width = "100%";
 
-        document.getElementById("rawOcrTextarea").value = allRawBlocks.join("
-
-");
+        document.getElementById("rawOcrTextarea").value = allRawBlocks.join("\n\n");
         renderOcrStagingTable();
       } catch (err) {
         console.error(err);
@@ -791,12 +787,30 @@ ${text}`);
       const logBody = document.getElementById("logTableBody");
       logBody.innerHTML = computed.map((r, i) => `
         <tr class="hover:bg-slate-50">
-          <td class="px-3 py-2 font-medium">${r.name}</td>
-          <td class="px-3 py-2">${r.date}</td>
-          <td class="px-3 py-2">${r.resolvedDayType}</td>
-          <td class="px-3 py-2 text-center font-mono">${r.clockIn || "-"}</td>
-          <td class="px-3 py-2 text-center font-mono">${r.clockOut || "-"}</td>
-          <td class="px-3 py-2 text-right">${r.breakMin || 0}</td>
+          <td class="px-2 py-1.5">
+            <input type="text" value="${r.name}" onchange="updateRow(${i}, 'name', this.value.toUpperCase())" class="border border-slate-200 rounded px-1.5 py-1 w-28 font-semibold uppercase text-xs" />
+          </td>
+          <td class="px-2 py-1.5">
+            <input type="date" value="${r.date}" onchange="updateRow(${i}, 'date', this.value)" class="border border-slate-200 rounded px-1.5 py-1 text-xs" />
+          </td>
+          <td class="px-2 py-1.5">
+            <select onchange="updateRow(${i}, 'dayType', this.value)" class="border border-slate-200 rounded px-1.5 py-1 text-xs">
+              <option value="Auto" ${r.dayType === 'Auto' ? 'selected' : ''}>Auto (${r.resolvedDayType})</option>
+              <option value="Weekday" ${r.dayType === 'Weekday' ? 'selected' : ''}>Weekday</option>
+              <option value="Saturday" ${r.dayType === 'Saturday' ? 'selected' : ''}>Saturday</option>
+              <option value="Sunday" ${r.dayType === 'Sunday' ? 'selected' : ''}>Sunday</option>
+              <option value="Public Holiday" ${r.dayType === 'Public Holiday' ? 'selected' : ''}>Public Holiday</option>
+            </select>
+          </td>
+          <td class="px-2 py-1.5 text-center">
+            <input type="text" value="${r.clockIn || ''}" placeholder="HH:MM" onchange="updateRow(${i}, 'clockIn', cleanTimeToken(this.value))" class="border border-slate-200 rounded px-1.5 py-1 w-16 font-mono text-center text-xs" />
+          </td>
+          <td class="px-2 py-1.5 text-center">
+            <input type="text" value="${r.clockOut || ''}" placeholder="HH:MM" onchange="updateRow(${i}, 'clockOut', cleanTimeToken(this.value))" class="border border-slate-200 rounded px-1.5 py-1 w-16 font-mono text-center text-xs" />
+          </td>
+          <td class="px-2 py-1.5 text-right">
+            <input type="number" min="0" value="${r.breakMin || 0}" onchange="updateRow(${i}, 'breakMin', Number(this.value) || 0)" class="border border-slate-200 rounded px-1.5 py-1 w-14 text-right text-xs" />
+          </td>
           <td class="px-3 py-2 text-right ${r.lateMin > 0 ? 'font-bold text-amber-700 bg-amber-50' : ''}">${r.lateMin}</td>
           <td class="px-3 py-2 text-right ${r.otMin > 0 ? 'font-bold text-teal-700 bg-teal-50' : ''}">${r.otMin}</td>
           <td class="px-3 py-2 text-right">${r.otHrs.toFixed(2)}</td>
@@ -805,6 +819,77 @@ ${text}`);
         </tr>
       `).join("");
     }
+
+    function updateRow(idx, field, value) {
+      if (!records[idx]) return;
+      records[idx][field] = value;
+      recalculateAll();
+    }
+
+    function switchPage(page) {
+      const mainPage = document.getElementById("mainPage");
+      const settingsPage = document.getElementById("settingsPage");
+      const tabMainBtn = document.getElementById("tabMainBtn");
+      const tabSettingsBtn = document.getElementById("tabSettingsBtn");
+
+      if (page === "settings") {
+        mainPage.classList.add("hidden");
+        settingsPage.classList.remove("hidden");
+        tabSettingsBtn.classList.add("bg-teal-600", "text-white");
+        tabSettingsBtn.classList.remove("text-slate-300");
+        tabMainBtn.classList.remove("bg-teal-600", "text-white");
+        tabMainBtn.classList.add("text-slate-300");
+      } else {
+        settingsPage.classList.add("hidden");
+        mainPage.classList.remove("hidden");
+        tabMainBtn.classList.add("bg-teal-600", "text-white");
+        tabMainBtn.classList.remove("text-slate-300");
+        tabSettingsBtn.classList.remove("bg-teal-600", "text-white");
+        tabSettingsBtn.classList.add("text-slate-300");
+      }
+    }
+
+    function saveSettings() {
+      const settings = {
+        wkStart: document.getElementById("cfgWkStart").value,
+        wkEnd: document.getElementById("cfgWkEnd").value,
+        satStart: document.getElementById("cfgSatStart").value,
+        satEnd: document.getElementById("cfgSatEnd").value,
+        grace: document.getElementById("cfgGrace").value,
+        minOt: document.getElementById("cfgMinOt").value,
+        round: document.getElementById("cfgRound").value
+      };
+      localStorage.setItem("ot_system_settings", JSON.stringify(settings));
+    }
+
+    function loadSettings() {
+      try {
+        const raw = localStorage.getItem("ot_system_settings");
+        if (!raw) return;
+        const s = JSON.parse(raw);
+        if (s.wkStart) document.getElementById("cfgWkStart").value = s.wkStart;
+        if (s.wkEnd) document.getElementById("cfgWkEnd").value = s.wkEnd;
+        if (s.satStart) document.getElementById("cfgSatStart").value = s.satStart;
+        if (s.satEnd) document.getElementById("cfgSatEnd").value = s.satEnd;
+        if (s.grace !== undefined) document.getElementById("cfgGrace").value = s.grace;
+        if (s.minOt !== undefined) document.getElementById("cfgMinOt").value = s.minOt;
+        if (s.round) document.getElementById("cfgRound").value = s.round;
+      } catch (e) {}
+    }
+
+    function resetSettings() {
+      document.getElementById("cfgWkStart").value = "08:30";
+      document.getElementById("cfgWkEnd").value = "17:30";
+      document.getElementById("cfgSatStart").value = "08:30";
+      document.getElementById("cfgSatEnd").value = "13:00";
+      document.getElementById("cfgGrace").value = "0";
+      document.getElementById("cfgMinOt").value = "0";
+      document.getElementById("cfgRound").value = "1";
+      saveSettings();
+      recalculateAll();
+    }
+
+    loadSettings();
 
     function addEntryFromForm() {
       const name = document.getElementById("inName").value.trim().toUpperCase() || "EMPLOYEE";
@@ -828,8 +913,7 @@ ${text}`);
     }
 
     function parseBulkPaste() {
-      const lines = document.getElementById("bulkPasteBox").value.split(/?
-/).filter(l => l.trim());
+      const lines = document.getElementById("bulkPasteBox").value.split(/\r?\n/).filter(l => l.trim());
       lines.forEach(line => {
         const parts = line.split(/[,	]+/).map(p => p.trim());
         if (parts.length >= 3) {
