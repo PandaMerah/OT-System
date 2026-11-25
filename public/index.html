@@ -4,7 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Employee OT Minutes System + Client-Side OCR</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; }
+  </style>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -14,24 +20,24 @@
     }
   </script>
 </head>
-<body class="bg-slate-50 text-slate-900 min-h-screen">
-  <header class="bg-slate-900 text-white shadow">
+<body class="bg-gradient-to-br from-slate-50 via-indigo-50/30 to-teal-50/40 text-slate-900 min-h-screen">
+  <header class="bg-gradient-to-r from-indigo-700 via-violet-700 to-teal-600 text-white shadow-lg">
     <div class="max-w-7xl mx-auto px-4 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
       <div>
-        <div class="flex items-center gap-2">
-          <h1 class="text-xl font-bold tracking-tight">Employee Overtime (OT) Minutes System</h1>
-          <span class="px-2 py-0.5 text-[11px] font-semibold bg-teal-600 text-white rounded-full">Tesseract.js OCR</span>
+        <div class="flex items-center gap-2.5">
+          <h1 class="text-xl font-extrabold tracking-tight">Employee Overtime (OT) System</h1>
+          <span class="px-2.5 py-0.5 text-[11px] font-bold bg-white/20 backdrop-blur-sm text-white rounded-full border border-white/30">OCR Ready</span>
         </div>
-        <p class="text-xs text-slate-300 mt-0.5">Client-Side KIJO 6902 PDF/Photo OCR • Multi-Employee Rollup • Excel/CSV Import & Export</p>
+        <p class="text-xs text-indigo-100 mt-1">Upload Time Cards • Manual Entry • Edit & Verify Attendance Logs</p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
-        <div class="inline-flex rounded-lg bg-slate-800 p-1 mr-2">
-          <button id="tabMainBtn" onclick="switchPage('main')" class="px-3 py-1 text-xs font-semibold rounded-md bg-teal-600 text-white transition">Main</button>
-          <button id="tabSettingsBtn" onclick="switchPage('settings')" class="px-3 py-1 text-xs font-semibold rounded-md text-slate-300 hover:text-white transition">Settings</button>
+        <div class="inline-flex rounded-xl bg-black/20 backdrop-blur-sm p-1 mr-1 border border-white/15">
+          <button id="tabMainBtn" onclick="switchPage('main')" class="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-teal-600 text-white shadow-sm transition">Main</button>
+          <button id="tabSettingsBtn" onclick="switchPage('settings')" class="px-3.5 py-1.5 text-xs font-bold rounded-lg text-slate-300 hover:text-white transition">Settings</button>
         </div>
-        <button onclick="loadSampleData()" class="px-3 py-1.5 text-xs font-medium bg-slate-700 hover:bg-slate-600 rounded-md transition">Load Sample</button>
-        <button onclick="clearAllRows()" class="px-3 py-1.5 text-xs font-medium bg-rose-700 hover:bg-rose-600 rounded-md transition">Clear Logs</button>
-        <button onclick="exportToExcel()" class="px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 rounded-md shadow transition">Export Excel (.xlsx)</button>
+        <button onclick="loadSampleData()" class="px-3.5 py-1.5 text-xs font-semibold bg-white/15 hover:bg-white/25 text-white border border-white/25 rounded-lg transition">Load Sample</button>
+        <button onclick="clearAllRows()" class="px-3.5 py-1.5 text-xs font-semibold bg-rose-500/90 hover:bg-rose-500 text-white rounded-lg shadow-sm transition">Clear Logs</button>
+        <button onclick="exportToExcel()" class="px-3.5 py-1.5 text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-white rounded-lg shadow-md transition">Export Excel (.xlsx)</button>
       </div>
     </div>
   </header>
@@ -40,21 +46,33 @@
     <div id="mainPage" class="space-y-6">
     <!-- KPI Cards -->
     <section class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      <div class="bg-white p-4 rounded-xl border border-slate-200 border-l-4 border-l-slate-800 shadow-sm">
-        <div class="text-xs font-semibold uppercase text-slate-500">Employees</div>
-        <div id="kpiEmployees" class="text-2xl font-bold mt-1 text-slate-900">0</div>
+      <div class="bg-white p-4 rounded-2xl border border-indigo-100 shadow-sm hover:shadow-md transition flex items-center justify-between">
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wider text-indigo-500">Employees</div>
+          <div id="kpiEmployees" class="text-2xl font-extrabold mt-1 text-slate-900">0</div>
+        </div>
+        <div class="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-lg">👥</div>
       </div>
-      <div class="bg-white p-4 rounded-xl border border-slate-200 border-l-4 border-l-teal-600 shadow-sm">
-        <div class="text-xs font-semibold uppercase text-slate-500">Total OT Minutes</div>
-        <div id="kpiOtMins" class="text-2xl font-bold mt-1 text-teal-700">0 min</div>
+      <div class="bg-white p-4 rounded-2xl border border-teal-100 shadow-sm hover:shadow-md transition flex items-center justify-between">
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wider text-teal-600">Total OT Minutes</div>
+          <div id="kpiOtMins" class="text-2xl font-extrabold mt-1 text-teal-700">0 min</div>
+        </div>
+        <div class="w-11 h-11 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold text-lg">⏱️</div>
       </div>
-      <div class="bg-white p-4 rounded-xl border border-slate-200 border-l-4 border-l-blue-600 shadow-sm">
-        <div class="text-xs font-semibold uppercase text-slate-500">Total OT Hours</div>
-        <div id="kpiOtHrs" class="text-2xl font-bold mt-1 text-blue-700">0.00 hrs</div>
+      <div class="bg-white p-4 rounded-2xl border border-sky-100 shadow-sm hover:shadow-md transition flex items-center justify-between">
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wider text-sky-600">Total OT Hours</div>
+          <div id="kpiOtHrs" class="text-2xl font-extrabold mt-1 text-sky-700">0.00 hrs</div>
+        </div>
+        <div class="w-11 h-11 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold text-lg">🕒</div>
       </div>
-      <div class="bg-white p-4 rounded-xl border border-slate-200 border-l-4 border-l-amber-500 shadow-sm">
-        <div class="text-xs font-semibold uppercase text-slate-500">Total Late Minutes</div>
-        <div id="kpiLateMins" class="text-2xl font-bold mt-1 text-amber-700">0 min</div>
+      <div class="bg-white p-4 rounded-2xl border border-amber-100 shadow-sm hover:shadow-md transition flex items-center justify-between">
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wider text-amber-600">Total Late Minutes</div>
+          <div id="kpiLateMins" class="text-2xl font-extrabold mt-1 text-amber-700">0 min</div>
+        </div>
+        <div class="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-lg">⚠️</div>
       </div>
     </section>
 
@@ -80,14 +98,14 @@
       <!-- Dropzone -->
       <div id="ocrDropzone"
            onclick="document.getElementById('ocrFileInput').click()"
-           ondragover="event.preventDefault(); this.classList.add('border-teal-500', 'bg-teal-50/40');"
-           ondragleave="this.classList.remove('border-teal-500', 'bg-teal-50/40');"
+           ondragover="event.preventDefault(); this.classList.add('border-teal-500', 'bg-teal-50/60');"
+           ondragleave="this.classList.remove('border-teal-500', 'bg-teal-50/60');"
            ondrop="handleOcrDrop(event)"
-           class="border-2 border-dashed border-slate-300 hover:border-teal-500 hover:bg-slate-50 rounded-xl p-6 text-center cursor-pointer transition">
+           class="border-2 border-dashed border-teal-300 bg-gradient-to-br from-teal-50/50 via-white to-indigo-50/40 hover:border-teal-500 hover:from-teal-50 hover:to-indigo-50/70 rounded-2xl p-7 text-center cursor-pointer transition">
         <input id="ocrFileInput" type="file" accept=".pdf,image/*" multiple onchange="handleOcrFiles(this.files)" class="hidden" />
-        <div class="mx-auto w-10 h-10 rounded-full bg-teal-50 text-teal-700 flex items-center justify-center font-bold text-lg mb-2">OCR</div>
-        <p class="text-sm font-semibold text-slate-800">Click to select or drag & drop KIJO Time Card PDFs or Photos</p>
-        <p class="text-xs text-slate-500 mt-1">Supports multi-page <code class="bg-slate-100 px-1 rounded">.pdf</code>, <code class="bg-slate-100 px-1 rounded">.jpg</code>, <code class="bg-slate-100 px-1 rounded">.png</code>, <code class="bg-slate-100 px-1 rounded">.webp</code> • Batch multiple employees at once</p>
+        <div class="mx-auto w-12 h-12 rounded-2xl bg-gradient-to-br from-teal-500 to-indigo-600 text-white shadow-md flex items-center justify-center font-extrabold text-sm mb-3">OCR</div>
+        <p class="text-sm font-bold text-slate-800">Click to select or drag &amp; drop Time Card PDFs or Photos</p>
+        <p class="text-xs text-slate-500 mt-1">Supports <code class="bg-white border border-slate-200 px-1.5 py-0.5 rounded text-teal-700 font-semibold">.pdf</code>, <code class="bg-white border border-slate-200 px-1.5 py-0.5 rounded text-teal-700 font-semibold">.jpg</code>, <code class="bg-white border border-slate-200 px-1.5 py-0.5 rounded text-teal-700 font-semibold">.png</code>, <code class="bg-white border border-slate-200 px-1.5 py-0.5 rounded text-teal-700 font-semibold">.webp</code> • Batch multiple employees at once</p>
       </div>
 
       <!-- OCR Progress Bar -->
@@ -197,7 +215,7 @@
           <input id="inBreak" type="number" min="0" value="0" class="w-full border border-slate-300 rounded-md px-2.5 py-1.5" />
         </div>
       </div>
-      <button onclick="addEntryFromForm()" class="mt-4 w-full sm:w-auto px-6 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-md transition">+ Add Attendance Record</button>
+      <button onclick="addEntryFromForm()" class="mt-4 w-full sm:w-auto px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-teal-600 hover:from-indigo-500 hover:to-teal-500 text-white text-sm font-bold rounded-xl shadow-sm transition">+ Add Attendance Record</button>
     </section>
 
     <!-- Detailed Attendance Table -->
